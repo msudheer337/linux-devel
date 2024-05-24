@@ -5,5 +5,5 @@
 # Copyright (c) 2024, Red Hat, Inc.
 #
 
-obj-y += shaper.o
+obj-y += shaper.o shaper_nl_gen.o
 
