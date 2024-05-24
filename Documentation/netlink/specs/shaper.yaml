@@ -1,0 +1,189 @@
+# SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
+
+name: net_shaper
+
+doc: Network HW Rate Limiting offload
+
+definitions:
+  -
+    type: enum
+    name: scope
+    doc: the different scopes where a shaper could be attached
+    entries:
+      -
+        name: port
+        doc: The root shaper for the whole H/W.
+      -
+        name: netdev
+        doc: The main shaper for the given network device.
+      -
+        name: queue
+        doc: The shaper is attached to the given device queue.
+      -
+        name: detached
+        doc: |
+             The shaper can be attached to port, netdev or other
+             detached shapers, allowing nesting and grouping of
+             netdev or queues.
+    render-max: true
+  -
+    type: enum
+    name: metric
+    doc: different metric each shaper can support
+    entries:
+      -
+        name: pps
+        doc: Shaper operates on a packets per second basis
+      -
+        name: bps
+        doc: Shaper operates on a bits per second basis
+
+attribute-sets:
+  -
+    name: net_shaper
+    attributes:
+      -
+        name: parent
+        type: nest
+        nested-attributes: handle
+      -
+        name: handle
+        type: nest
+        nested-attributes: handle
+      -
+        name: metric
+        type: u32
+        enum: metric
+      -
+        name: bw_min
+        type: u64
+      -
+        name: bw_max
+        type: u64
+      -
+        name: burst
+        type: u64
+      -
+        name: priority
+        type: u32
+      -
+        name: weight
+        type: u32
+      -
+        name: scope
+        type: u32
+        enum: scope
+      -
+        name: major
+        type: u32
+      -
+        name: minor
+        type: u32
+      -
+        name: ifindex
+        type: u32
+      -
+         name: handles
+         type: nest
+         multi-attr: true
+         nested-attributes: handle
+      -
+        name: shapers
+        type: nest
+        multi-attr: true
+        nested-attributes: ns-info
+      -
+        name: pad
+        type: pad
+  -
+    name: handle
+    subset-of: net_shaper
+    attributes:
+      -
+        name: scope
+      -
+        name: major
+      -
+        name: minor
+  -
+    name: ns-info
+    subset-of: net_shaper
+    attributes:
+      -
+        name: parent
+      -
+        name: handle
+      -
+        name: metric
+      -
+        name: bw_min
+      -
+        name: bw_max
+      -
+        name: burst
+      -
+        name: priority
+      -
+        name: weight
+
+operations:
+  list:
+    -
+      name: get
+      doc: |
+        Get / Dump information about a/all the shaper for a given device
+      attribute-set: net_shaper
+      flags: [ admin-perm ]
+
+      do:
+        request:
+          attributes:
+            - ifindex
+            - handle
+        reply:
+          attributes: &ns-attrs
+            - parent
+            - handle
+            - metric
+            - bw_min
+            - bw_max
+            - burst
+            - priority
+            - weight
+
+      dump:
+        request:
+          attributes:
+            - ifindex
+        reply:
+          attributes: *ns-attrs
+    -
+      name: set
+      doc: |
+        Create or configures the specified shapers.
+        The update is atomic with respect to all shaper
+        affected by a single command.
+      attribute-set: net_shaper
+      flags: [ admin-perm ]
+
+      do:
+        request:
+          attributes:
+            - ifindex
+            - shapers
+
+    -
+      name: delete
+      doc: |
+        Clear (remove) the specified shapers.
+        The update is atomic with respect to all shaper
+        affected by a single command.
+      attribute-set: net_shaper
+      flags: [ admin-perm ]
+
+      do:
+        request:
+          attributes:
+            - ifindex
+            - handles
+
