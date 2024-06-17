@@ -2086,6 +2086,11 @@ static int iavf_process_aq_command(struct iavf_adapter *adapter)
 		return 0;
 	}
 
+	if (adapter->aq_required & IAVF_FLAG_AQ_CONFIGURE_QUEUES_BW) {
+		iavf_cfg_queues_bw(adapter);
+		return 0;
+	}
+
 	if (adapter->aq_required & IAVF_FLAG_AQ_CONFIGURE_QUEUES) {
 		iavf_configure_queues(adapter);
 		return 0;
@@ -4744,6 +4749,100 @@ static netdev_features_t iavf_fix_features(struct net_device *netdev,
 	return iavf_fix_strip_features(adapter, features);
 }
 
+/**
+ * iavf_verify_shaper_info - check that shaper info received
+ * @dev: pointer to netdev
+ * @nr: The number of items in the @handles and @shapers array
+ * @shapers: configuration of shaper.
+ * @extack: Netlink extended ACK for reporting errors
+ *
+ * Returns:
+ * * %0 - Success
+ * * %-EOPNOTSUPP - Driver doesn't support this scope.
+ * * %-EINVAL - Invalid queue number in input
+ **/
+static int
+iavf_verify_shaper_info(struct net_device *dev, int nr,
+			const struct net_shaper_info *shapers,
+			struct netlink_ext_ack *extack)
+{
+	struct iavf_adapter *adapter = netdev_priv(dev);
+	enum net_shaper_scope scope;
+	int major, minor;
+	int i;
+
+	for (i = 0; i < nr; i++) {
+		scope = net_shaper_handle_scope(shapers[i].handle);
+		major = net_shaper_handle_major(shapers[i].handle);
+		minor = net_shaper_handle_minor(shapers[i].handle);
+
+		if (scope == NET_SHAPER_SCOPE_QUEUE) {
+			if (minor >= adapter->num_active_queues) {
+				netdev_err(dev, "Invalid shaper handle at entry %d",
+					   i);
+				return -EINVAL;
+			}
+		} else {
+			return -EOPNOTSUPP;
+		}
+	}
+	return 0;
+}
+
+/**
+ * iavf_shaper_set - check that shaper info received
+ * @dev: pointer to netdev
+ * @nr: The number of items in the @handles and @shapers array
+ * @handles: The shapers identifier
+ * @shapers: configuration of shaper.
+ * @extack: Netlink extended ACK for reporting errors
+ *
+ * Returns:
+ * * %0 - Success
+ * * %-EOPNOTSUPP - Driver doesn't support this scope.
+ * * %-EINVAL - Invalid queue number in input
+ **/
+static int
+iavf_shaper_set(struct net_device *dev, int nr,
+		const struct net_shaper_info *shapers,
+		struct netlink_ext_ack *extack)
+{
+	struct iavf_adapter *adapter = netdev_priv(dev);
+	bool need_cfg_update = false;
+	enum net_shaper_scope scope;
+	int major, minor, ret = 0;
+	u32 i;
+
+	ret = iavf_verify_shaper_info(dev, nr, shapers, extack);
+	if (!ret)
+		return ret;
+
+	for (i = 0; i < nr; i++) {
+		scope = net_shaper_handle_scope(shapers[i].handle);
+		major = net_shaper_handle_major(shapers[i].handle);
+		minor = net_shaper_handle_minor(shapers[i].handle);
+
+		if (scope == NET_SHAPER_SCOPE_QUEUE) {
+			struct iavf_ring *tx_ring = &adapter->tx_rings[minor];
+
+			//convert bw into kbps
+			tx_ring->q_shaper.bw_min = shapers[i].bw_min;
+			tx_ring->q_shaper.bw_max = shapers[i].bw_max;
+			tx_ring->q_shaper_update = true;
+			need_cfg_update = true;
+		}
+	}
+
+	if (need_cfg_update)
+		adapter->aq_required |= IAVF_FLAG_AQ_CONFIGURE_QUEUES_BW;
+
+	return ret;
+}
+
+static const struct net_shaper_ops iavf_shaper_ops = {
+	.set = iavf_shaper_set,
+};
+
 static const struct net_device_ops iavf_netdev_ops = {
 	.ndo_open		= iavf_open,
 	.ndo_stop		= iavf_close,
@@ -4759,6 +4858,7 @@ static const struct net_device_ops iavf_netdev_ops = {
 	.ndo_fix_features	= iavf_fix_features,
 	.ndo_set_features	= iavf_set_features,
 	.ndo_setup_tc		= iavf_setup_tc,
+	.net_shaper_ops		= &iavf_shaper_ops,
 };
 
 /**
