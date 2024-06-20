@@ -560,6 +560,17 @@ put:
 	return ret;
 }
 
+int net_shaper_nl_cap_get_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	return 0;
+}
+
+int net_shaper_nl_cap_get_dumpit(struct sk_buff *skb,
+				 struct netlink_callback *cb)
+{
+	return 0;
+}
+
 void dev_shaper_flush(struct net_device *dev)
 {
 	struct net_shaper_info *cur;

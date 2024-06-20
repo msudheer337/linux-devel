@@ -125,6 +125,51 @@ attribute-sets:
         name: priority
       -
         name: weight
+  -
+    name: capabilities
+    attributes:
+      -
+        name: ifindex
+        type: u32
+      -
+        name: scope
+        type: u32
+        enum: scope
+      -
+        name: support-metric-bps
+        doc: the device accepts 'bps' metric for bw-min, bw-max and burst
+        type: flag
+      -
+        name: support-metric-pps
+        doc: the device accepts 'pps' metric for bw-min, bw-max and burst
+        type: flag
+      -
+        name: support-nesting
+        doc: |
+          the device supports nesting shaper belonging to this scope
+          below 'detached' scoped shapers. Only 'queue', 'netdev' and
+          'detached' scope and flag 'support-nesting'.
+        type: flag
+      -
+        name: support-bw-min
+        doc: the device supports a minimum guaranteed bw
+        type: flag
+      -
+        name: support-bw-max
+        doc: the device supports maximum bw shaping
+        type: flag
+      -
+        name: support-burst
+        doc: the device supports a maximum burst size
+        type: flag
+      -
+        name: support-priority
+        doc: the device supports priority scheduling
+        type: flag
+      -
+        name: support-weight
+        doc: the device supports weighted round robin scheduling
+        type: flag
 
 operations:
   list:
@@ -200,3 +245,32 @@ operations:
         reply:
           attributes:
             - modified
+
+    -
+      name: cap-get
+      doc: |
+        Get / Dump the shaper capabilities supported by the given device
+      attribute-set: capabilities
+
+      do:
+        request:
+          attributes:
+            - ifindex
+            - scope
+        reply:
+          attributes: &cap-attrs
+            - support-metric-bps
+            - support-metric-pps
+            - support-nesting
+            - support-bw-min
+            - support-bw-max
+            - support-burst
+            - support-priority
+            - support-weight
+
+      dump:
+        request:
+          attributes:
+            - ifindex
+        reply:
+          attributes: *cap-attrs
