@@ -1507,6 +1507,56 @@ iavf_set_adapter_link_speed_from_vpe(struct iavf_adapter *adapter,
 }
 
 /**
+ * iavf_cfg_queues_bw - configure bandwidth of allocated queues
+ * @adapter: iavf adapter structure instance
+ *
+ * This function requests PF to configure queue bandwidth of allocated queues
+ */
+void iavf_cfg_queues_bw(struct iavf_adapter *adapter)
+{
+	struct virtchnl_queues_bw_cfg *qs_bw_cfg;
+	struct net_shaper_info *q_shaper;
+	size_t len;
+	int i;
+
+	if (adapter->current_op != VIRTCHNL_OP_UNKNOWN) {
+		/* bail because we already have a command pending */
+		dev_err(&adapter->pdev->dev,
+			"Cannot set tc queue bw, command %d pending\n",
+			adapter->current_op);
+		return;
+	}
+
+	len = struct_size(qs_bw_cfg, cfg, adapter->num_active_queues);
+	qs_bw_cfg = kzalloc(len, GFP_KERNEL);
+	if (!qs_bw_cfg)
+		return;
+
+	qs_bw_cfg->vsi_id = adapter->vsi.id;
+	qs_bw_cfg->num_queues = adapter->num_active_queues;
+
+	for (i = 0; i < qs_bw_cfg->num_queues; i++) {
+		struct iavf_ring *tx_ring = &adapter->tx_rings[i];
+
+		q_shaper = &tx_ring->q_shaper;
+		//Does all queues need to be updated when only subset of queues are updated?
+		if (tx_ring->q_shaper_update) {
+			qs_bw_cfg->cfg[i].queue_id = i;
+			qs_bw_cfg->cfg[i].shaper.peak = q_shaper->bw_max;
+			qs_bw_cfg->cfg[i].shaper.committed = q_shaper->bw_min;
+			qs_bw_cfg->cfg[i].tc = 0;
+			tx_ring->q_shaper_update = false;
+		}
+	}
+
+	adapter->current_op = VIRTCHNL_OP_CONFIG_QUEUE_BW;
+	adapter->aq_required &= ~IAVF_FLAG_AQ_CONFIGURE_QUEUES_BW;
+	iavf_send_pf_msg(adapter, VIRTCHNL_OP_CONFIG_QUEUE_BW,
+			 (u8 *)qs_bw_cfg, len);
+	kfree(qs_bw_cfg);
+}
+
+/**
  * iavf_enable_channels
  * @adapter: adapter structure
  *
@@ -2226,6 +2276,10 @@ void iavf_virtchnl_completion(struct iavf_adapter *adapter,
 					VIRTCHNL_RSS_ALG_TOEPLITZ_SYMMETRIC;
 
 			break;
+		case VIRTCHNL_OP_CONFIG_QUEUE_BW:
+			dev_warn(&adapter->pdev->dev, "Failed to Config Queue BW, error %s\n",
+				 iavf_stat_str(&adapter->hw, v_retval));
+			break;
 		default:
 			dev_err(&adapter->pdev->dev, "PF returned error %d (%s) to our request %d\n",
 				v_retval, iavf_stat_str(&adapter->hw, v_retval),
@@ -2559,6 +2613,8 @@ void iavf_virtchnl_completion(struct iavf_adapter *adapter,
 		 */
 		if (!v_retval)
 			iavf_netdev_features_vlan_strip_set(netdev, false);
+		break;
+	case VIRTCHNL_OP_CONFIG_QUEUE_BW:
 		break;
 	default:
 		if (adapter->current_op && (v_opcode != adapter->current_op))

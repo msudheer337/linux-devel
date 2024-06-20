@@ -1,0 +1,138 @@
+# SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
+
+name: net_shaper
+
+doc: Network HW Rate Limiting offload
+
+definitions:
+  -
+    type: enum
+    name: metric
+    doc: different metric each shaper can support
+    entries:
+      -
+        name: pps
+        doc: Shaper operates on a packets per second basis
+      -
+        name: bps
+        doc: Shaper operates on a bits per second basis
+
+attribute-sets:
+  -
+    name: info
+    attributes:
+      -
+        name: handle
+        type: u32
+      -
+        name: metric
+        type: u32
+        enum: metric
+      -
+        name: bw_min
+        type: u64
+      -
+        name: bw_max
+        type: u64
+      -
+        name: priority
+        type: u32
+      -
+        name: weight
+        type: u32
+
+  -
+    name: pair
+    attributes:
+      -
+        name: handle
+        type: u32
+      -
+        name: new-parent
+        type: u32
+
+  -
+    name: dev
+    name-prefix: net-shaper-a-
+    attributes:
+      -
+        name: ifindex
+        type: u32
+      -
+        name: handles
+        type: u32
+        multi-attr: true
+      -
+        name: info-list
+        type: nest
+        nested-attributes: info
+        multi-attr: true
+      -
+        name: handle-pairs
+        type: nest
+        nested-attributes: pair
+        multi-attr: true
+
+operations:
+  list:
+    -
+      name: get
+      doc: |
+        Get / Dump information about a/all the shaper for a given device
+      attribute-set: dev
+      flags: [ admin-perm ]
+
+      do:
+        request:
+          attributes:
+            - ifindex
+            - handles
+        reply:
+          attributes:
+            - info-list
+      dump:
+        request:
+          attributes:
+            - ifindex
+        reply:
+          attributes:
+            - info-list
+    -
+      name: set
+      doc: |
+        Create or configures the specfied shapers
+      attribute-set: dev
+      flags: [ admin-perm ]
+
+      do:
+        request:
+          attributes:
+            - ifindex
+            - info-list
+
+    -
+      name: reset
+      doc: |
+        Clear (remove) the specified shapers
+      attribute-set: dev
+      flags: [ admin-perm ]
+
+      do:
+        request:
+          attributes:
+            - ifindex
+            - handles
+
+    -
+      name: move
+      doc: |
+        move the specified shaper different new parents
+      attribute-set: dev
+      flags: [ admin-perm ]
+
+      do:
+        request:
+          attributes:
+            - ifindex
+            - handle-pairs
+
