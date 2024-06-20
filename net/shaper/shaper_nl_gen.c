@@ -53,7 +53,7 @@ static const struct nla_policy net_shaper_delete_nl_policy[NET_SHAPER_A_HANDLES 
 /* NET_SHAPER_CMD_CAP_GET - do */
 static const struct nla_policy net_shaper_cap_get_do_nl_policy[NET_SHAPER_A_CAPABILITIES_SCOPE + 1] = {
 	[NET_SHAPER_A_CAPABILITIES_IFINDEX] = { .type = NLA_U32, },
-	[NET_SHAPER_A_CAPABILITIES_SCOPE] = NLA_POLICY_MAX(NLA_U32, 3),
+	[NET_SHAPER_A_CAPABILITIES_SCOPE] = NLA_POLICY_MAX(NLA_U32, 4),
 };
 
 /* NET_SHAPER_CMD_CAP_GET - dump */

@@ -49,6 +49,7 @@ struct net_shaper_info {
  * struct net_shaper_ops - Operations on device H/W shapers
  * @set: Modify the existing shaper.
  * @delete: Delete the specified shaper.
+ * @capabilities: Introspect the device shaper-related features
  *
  * The initial shaping configuration ad device initialization is empty/
  * a no-op/does not constraint the b/w in any way.
@@ -101,6 +102,18 @@ struct net_shaper_ops {
 	 */
 	int (*delete)(struct net_device *dev, int nr, const u32 *handles,
 		      struct netlink_ext_ack *extack);
+
+	/** capabilities - get the shaper features supported by the NIC
+	 * @dev: netdevice to operate on
+	 * @scope: the queried scope
+	 * @flags: bitfield of supported features for the given scope
+	 *
+	 * Return:
+	 * * %0 - Success, @flags is set according to the supported features
+	 * * %-EOPNOTSUPP - the H/W does not support the specified scope
+	 */
+	int (*capabilities)(struct net_device *dev, enum net_shaper_scope,
+			    unsigned long *flags);
 };
 
 #define NET_SHAPER_SCOPE_SHIFT	16
