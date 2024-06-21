@@ -2091,6 +2091,16 @@ static int iavf_process_aq_command(struct iavf_adapter *adapter)
 		return 0;
 	}
 
+	if (adapter->aq_required & IAVF_FLAG_AQ_GET_QOS_CAPS) {
+		iavf_get_qos_caps(adapter);
+		return 0;
+	}
+
+	if (adapter->aq_required & IAVF_FLAG_AQ_CFG_QUEUES_QUANTA_SIZE) {
+		iavf_cfg_queues_quanta_size(adapter);
+		return 0;
+	}
+
 	if (adapter->aq_required & IAVF_FLAG_AQ_CONFIGURE_QUEUES) {
 		iavf_configure_queues(adapter);
 		return 0;
@@ -2675,6 +2685,9 @@ static void iavf_init_config_adapter(struct iavf_adapter *adapter)
 	if (VLAN_V2_ALLOWED(adapter))
 		/* request initial VLAN offload settings */
 		iavf_set_vlan_offload_features(adapter, 0, netdev->features);
+
+	if (QOS_ALLOWED(adapter))
+		adapter->aq_required |= IAVF_FLAG_AQ_GET_QOS_CAPS;
 
 	iavf_schedule_finish_config(adapter);
 	return;
@@ -4790,6 +4803,7 @@ iavf_verify_shaper_info(struct net_device *dev, int nr,
 	struct iavf_adapter *adapter = netdev_priv(dev);
 	enum net_shaper_scope scope;
 	int i, qid;
+	u64 vf_max;
 
 	for (i = 0; i < nr; i++) {
 		scope = net_shaper_handle_scope(shapers[i].handle);
@@ -4801,6 +4815,13 @@ iavf_verify_shaper_info(struct net_device *dev, int nr,
 						   i, qid,
 						   adapter->num_active_queues);
 				return -EINVAL;
+			}
+
+			vf_max = adapter->qos_caps->cap[0].shaper.peak;
+			if (vf_max && shapers[i].bw_max > vf_max) {
+				NL_SET_ERR_MSG_FMT(extack, "Max rate (%llu) of queue %d can't exceed max TX rate of VF (%llu kbps)",
+						   shapers[i].bw_max, qid,
+						   vf_max);
 			}
 		} else {
 			NL_SET_ERR_MSG_FMT(extack, "Invalid shaper handle at entry %d, unsupported scope %d",
@@ -5095,7 +5116,7 @@ static int iavf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct net_device *netdev;
 	struct iavf_adapter *adapter = NULL;
 	struct iavf_hw *hw = NULL;
-	int err;
+	int err, len;
 
 	err = pci_enable_device(pdev);
 	if (err)
@@ -5163,6 +5184,13 @@ static int iavf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	hw->bus.func = PCI_FUNC(pdev->devfn);
 	hw->bus.bus_id = pdev->bus->number;
 
+	len = struct_size(adapter->qos_caps, cap, IAVF_MAX_QOS_TC_NUM);
+	adapter->qos_caps = kzalloc(len, GFP_KERNEL);
+	if (!adapter->qos_caps) {
+		err = -ENOMEM;
+		goto err_alloc_qos_cap;
+	}
+
 	/* set up the locks for the AQ, do this only once in probe
 	 * and destroy them only once in remove
 	 */
@@ -5201,6 +5229,8 @@ static int iavf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Initialization goes on in the work. Do not add more of it below. */
 	return 0;
 
+err_alloc_qos_cap:
+	iounmap(hw->hw_addr);
 err_ioremap:
 	destroy_workqueue(adapter->wq);
 err_alloc_wq:
